@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>吃播遊戲 Mukbang Live Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800;900&family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Fredoka', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        cozyBg: '#FFF8F0',
+                        cozyWarm: '#FFE8D6',
+                        streamPink: '#FF6B8B',
+                        streamPurple: '#8B5CF6',
+                    },
+                    animation: {
+                        'bounce-short': 'bounceShort 0.5s ease-in-out 2',
+                        'shake': 'shake 0.5s ease-in-out',
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        bounceShort: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-12px)' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '20%, 60%': { transform: 'translateX(-8px)' },
+                            '40%, 80%': { transform: 'translateX(8px)' },
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { opacity: '0.8', transform: 'scale(1)' },
+                            '50%': { opacity: '1', transform: 'scale(1.03)' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-8px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background-color: #FFF8F0; /* Pure cozy warm cream background, NO black */
+        }
+
+        /* Face Reaction Tints */
+        .face-normal { filter: none; transition: filter 0.4s ease; }
+        .face-spicy { filter: sepia(0.8) saturate(5) hue-rotate(-50deg) drop-shadow(0 0 16px rgba(239, 68, 68, 0.8)); }
+        .face-stinky { filter: sepia(0.8) saturate(4) hue-rotate(220deg) drop-shadow(0 0 16px rgba(168, 85, 247, 0.8)); }
+        .face-bitter { filter: sepia(0.8) saturate(4) hue-rotate(80deg) drop-shadow(0 0 16px rgba(34, 197, 94, 0.8)); }
+        .face-weird { filter: brightness(0.45) contrast(1.25) grayscale(0.4) drop-shadow(0 0 16px rgba(30, 27, 46, 0.9)); }
+        .face-delicious { filter: brightness(1.1) saturate(1.25) drop-shadow(0 0 16px rgba(244, 114, 182, 0.8)); }
+
+        /* Custom Scrollbar */
+        .chat-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chat-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        /* Floating Particle */
+        .particle {
+            position: fixed;
+            pointer-events: none;
+            animation: particleUp 1.2s ease-out forwards;
+        }
+        @keyframes particleUp {
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
+        }
+
+        /* Pure Custom Floating Drag Item (No native ghosting black box) */
+        .custom-drag-clone {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%) scale(1.08) rotate(-2deg);
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25);
+            background-color: #FFFFFF !important;
+            border-radius: 1rem;
+            transition: transform 0.05s linear;
+        }
+
+        .food-card {
+            transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background-color: #FFFFFF;
+        }
+        .food-card:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 16px -2px rgba(0, 0, 0, 0.12);
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden bg-amber-50 text-slate-800">
+
+    <!-- ================= PAGE 1: CHARACTER SELECTION SCREEN ================= -->
+    <div id="selectScreen" class="absolute inset-0 z-50 bg-gradient-to-br from-amber-50 via-orange-50 to-pink-100 flex flex-col items-center justify-between p-4 sm:p-6 overflow-y-auto">
+        <!-- Header -->
+        <div class="text-center mt-2 mb-2">
+            <div class="inline-block bg-pink-500 text-white font-extrabold text-xs sm:text-sm px-4 py-1 rounded-full shadow-md mb-2 animate-bounce">
+                <i class="fa-solid fa-broadcast-tower mr-1"></i> MUKBANG LIVE SIMULATOR
+            </div>
+            <h1 class="text-2xl sm:text-4xl font-black text-slate-800 tracking-wide drop-shadow-sm">
+                ✨ 選擇要觀看的吃播主 ✨
+            </h1>
+            <p class="text-slate-600 text-xs sm:text-sm mt-1 font-medium">
+               
+            </p>
+        </div>
+
+        <!-- Character Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-4xl my-auto">
+            
+            <!-- Character 1 Card -->
+            <div class="group bg-white rounded-3xl p-4 sm:p-5 shadow-xl hover:shadow-2xl border-4 border-transparent hover:border-pink-400 transition-all duration-300 flex flex-col items-center relative overflow-hidden transform hover:-translate-y-2">
+                <div class="absolute top-3 right-3 bg-pink-100 text-pink-600 font-bold text-xs px-2.5 py-0.5 rounded-full z-10">❤️</div>
+                <div onclick="selectCharacter(0)" class="w-40 h-40 sm:w-44 sm:h-44 rounded-2xl bg-amber-50 border-2 border-dashed border-pink-400 flex flex-col items-center justify-center p-1 relative overflow-hidden group-hover:scale-105 transition-transform cursor-pointer">
+                    <img id="charPreviewImg0" src="Character1.jpg" alt="好友 A" class="w-full h-full object-cover rounded-xl" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <div class="hidden w-full h-full flex-col items-center justify-center p-2 text-center">
+                        <i class="fa-solid fa-user-astronaut text-4xl text-pink-400 mb-1"></i>
+                        <span class="text-xs font-bold text-pink-800 bg-white/90 px-2.5 py-1 rounded-md shadow-sm border border-pink-300">
+                            [ 點擊或上傳照片 1 ]
+                        </span>
+                    </div>
+                </div>
+                <h3 class="text-lg font-black text-slate-800 mt-3">吃播主 1</h3>
+                <p class="text-xs text-slate-500 text-center mt-1">「嗨大家！今天我要來挑戰美食極限，餵我吃東西吧！😋」</p>
+                
+                <!-- Quick Upload Option -->
+                <label class="mt-2.5 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-1.5 px-3 rounded-xl shadow-sm transition text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700">
+                    <i class="fa-solid fa-camera text-pink-400"></i> 上傳照片 1
+                    <input type="file" accept="image/*" class="hidden" onchange="handleCharacterUpload(0, event)">
+                </label>
+
+                <button onclick="selectCharacter(0)" class="mt-2 w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-xl shadow-md transition text-xs sm:text-sm">
+                    選擇吃播主 1 直播 <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </div>
+
+            <!-- Character 2 Card -->
+            <div class="group bg-white rounded-3xl p-4 sm:p-5 shadow-xl hover:shadow-2xl border-4 border-transparent hover:border-amber-400 transition-all duration-300 flex flex-col items-center relative overflow-hidden transform hover:-translate-y-2">
+                <div class="absolute top-3 right-3 bg-amber-100 text-amber-700 font-bold text-xs px-2.5 py-0.5 rounded-full z-10">❤️</div>
+                <div onclick="selectCharacter(1)" class="w-40 h-40 sm:w-44 sm:h-44 rounded-2xl bg-amber-50 border-2 border-dashed border-amber-400 flex flex-col items-center justify-center p-1 relative overflow-hidden group-hover:scale-105 transition-transform cursor-pointer">
+                    <img id="charPreviewImg1" src="Character2.jpg" alt="好友 B" class="w-full h-full object-cover rounded-xl" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <div class="hidden w-full h-full flex-col items-center justify-center p-2 text-center">
+                        <i class="fa-solid fa-user-ninja text-4xl text-amber-500 mb-1"></i>
+                        <span class="text-xs font-bold text-amber-900 bg-white/90 px-2.5 py-1 rounded-md shadow-sm border border-amber-300">
+                            [ 點擊或上傳照片 2 ]
+                        </span>
+                    </div>
+                </div>
+                <h3 class="text-lg font-black text-slate-800 mt-3">吃播主 2</h3>
+                <p class="text-xs text-slate-500 text-center mt-1">「不管多奇怪的食物，儘管放馬過來吧！🔥」</p>
+                
+                <!-- Quick Upload Option -->
+                <label class="mt-2.5 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-1.5 px-3 rounded-xl shadow-sm transition text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700">
+                    <i class="fa-solid fa-camera text-amber-400"></i> 上傳照片 2
+                    <input type="file" accept="image/*" class="hidden" onchange="handleCharacterUpload(1, event)">
+                </label>
+
+                <button onclick="selectCharacter(1)" class="mt-2 w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-xl shadow-md transition text-xs sm:text-sm">
+                    選擇吃播主 2 直播 <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </div>
+
+            <!-- Character 3 Card -->
+            <div class="group bg-white rounded-3xl p-4 sm:p-5 shadow-xl hover:shadow-2xl border-4 border-transparent hover:border-purple-400 transition-all duration-300 flex flex-col items-center relative overflow-hidden transform hover:-translate-y-2">
+                <div class="absolute top-3 right-3 bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-0.5 rounded-full z-10">❤️</div>
+                <div onclick="selectCharacter(2)" class="w-40 h-40 sm:w-44 sm:h-44 rounded-2xl bg-amber-50 border-2 border-dashed border-purple-400 flex flex-col items-center justify-center p-1 relative overflow-hidden group-hover:scale-105 transition-transform cursor-pointer">
+                    <img id="charPreviewImg2" src="Character3.jpg" alt="好友 C" class="w-full h-full object-cover rounded-xl" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <div class="hidden w-full h-full flex-col items-center justify-center p-2 text-center">
+                        <i class="fa-solid fa-user-secret text-4xl text-purple-500 mb-1"></i>
+                        <span class="text-xs font-bold text-purple-900 bg-white/90 px-2.5 py-1 rounded-md shadow-sm border border-purple-300">
+                            [ 點擊或上傳照片 3 ]
+                        </span>
+                    </div>
+                </div>
+                <h3 class="text-lg font-black text-slate-800 mt-3">吃播主 3</h3>
+                <p class="text-xs text-slate-500 text-center mt-1">「聽說今天有很多好吃的料理？讓我這個美食家來試試！👀」</p>
+                
+                <!-- Quick Upload Option -->
+                <label class="mt-2.5 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-1.5 px-3 rounded-xl shadow-sm transition text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700">
+                    <i class="fa-solid fa-camera text-purple-400"></i> 上傳照片 3
+                    <input type="file" accept="image/*" class="hidden" onchange="handleCharacterUpload(2, event)">
+                </label>
+
+                <button onclick="selectCharacter(2)" class="mt-2 w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-xl shadow-md transition text-xs sm:text-sm">
+                    選擇吃播主 3 直播 <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Footer info -->
+        <div class="text-[11px] text-slate-500 font-bold mb-1 text-center bg-white/90 px-4 py-1.5 rounded-full shadow-sm border border-amber-200">
+            💡 提示：點擊按鈕可直接從電腦或手機選擇照片上傳照片進行直播！
+        </div>
+    </div>
+
+    <!-- ================= TOP HUD BAR ================= -->
+    <header class="w-full bg-white/95 backdrop-blur-md border-b border-amber-200 px-3 sm:px-6 py-2 flex items-center justify-between shadow-sm z-30 shrink-0 h-14">
+        <!-- Left Live Info -->
+        <div class="flex items-center gap-2">
+            <div class="flex items-center bg-red-500 text-white font-bold text-xs px-2.5 py-1 rounded-full animate-pulse">
+                <span class="w-2 h-2 bg-white rounded-full mr-1.5 animate-ping"></span>
+                LIVE 直播中
+            </div>
+            <div class="flex items-center gap-1.5 text-slate-700 font-bold text-xs bg-amber-100/80 px-2.5 py-1 rounded-full">
+                <i class="fa-solid fa-user-group text-pink-500"></i>
+                <span id="viewerCount">12,580</span> 人觀看
+            </div>
+            <div class="hidden sm:flex items-center gap-1.5 text-slate-700 font-bold text-xs bg-rose-100/80 px-2.5 py-1 rounded-full">
+                <i class="fa-solid fa-heart text-rose-500"></i>
+                <span id="likeCount">88.4K</span>
+            </div>
+        </div>
+
+        <!-- Stream Title -->
+        <div class="text-center truncate max-w-[160px] sm:max-w-xs md:max-w-md font-black text-slate-800 text-xs sm:text-base">
+            <span id="headerStreamerName">吃播 1</span> 的狂歡吃播秀 🍽️
+        </div>
+
+        <!-- Right Controls -->
+        <div class="flex items-center gap-2">
+            <button onclick="toggleSound()" id="soundBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold w-8 h-8 rounded-full flex items-center justify-center transition shadow-sm" title="聲音開關">
+                <i class="fa-solid fa-volume-high text-xs"></i>
+            </button>
+            <button onclick="openPauseModal()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1 rounded-full text-xs flex items-center gap-1 shadow transition transform active:scale-95">
+                <i class="fa-solid fa-pause"></i> 暫停
+            </button>
+        </div>
+    </header>
+
+    <!-- ================= MAIN VIEW CONTAINER (LEFT CHAT + RIGHT STREAM) ================= -->
+    <div class="flex-1 flex flex-row overflow-hidden relative bg-amber-50 w-full">
+        
+        <!-- LEFT SIDEBAR: CHATROOM (PINNED TO THE LEFT) -->
+        <div class="w-56 sm:w-64 md:w-72 lg:w-80 bg-slate-900 text-white flex flex-col border-r border-slate-700/80 shrink-0 h-full z-20 shadow-xl">
+            
+            <!-- Chat Header -->
+            <div class="bg-slate-800/90 px-3 py-2.5 border-b border-slate-700 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-1.5 font-black text-xs text-slate-200">
+                    <i class="fa-solid fa-comments text-pink-400"></i>
+                    即時聊天室 (Live Chat)
+                </div>
+                <span id="chatSpeedBadge" class="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    討論超熱烈 🔥
+                </span>
+            </div>
+
+            <!-- Chat Messages Scroll Container -->
+            <div id="chatBox" class="flex-1 p-2.5 overflow-y-auto chat-scroll flex flex-col gap-2 text-xs">
+                <!-- Dynamic chats -->
+            </div>
+
+            <!-- Chat Input Box -->
+            <div class="p-2 bg-slate-800/90 border-t border-slate-700 flex gap-1.5 shrink-0">
+                <input id="userChatInput" type="text" placeholder="發送彈幕一起討論..." class="flex-1 bg-slate-900 text-slate-100 text-xs rounded-xl px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-pink-500" onkeypress="if(event.key==='Enter') sendUserChat()">
+                <button onclick="sendUserChat()" class="bg-pink-500 hover:bg-pink-600 text-white font-bold px-2.5 py-1.5 rounded-xl text-xs transition">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- RIGHT AREA: STREAMER & DINING TABLE (ALWAYS VISIBLE) -->
+        <div class="flex-1 flex flex-col justify-between items-center overflow-y-auto p-3 sm:p-4 relative h-full bg-gradient-to-b from-amber-100/60 via-orange-50/50 to-amber-100/80 gap-2">
+            
+            <!-- Background Pattern -->
+            <div class="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px]"></div>
+
+            <!-- Floating SuperChat Alert Toast (Positioned top-right corner to avoid covering dialogue) -->
+            <div id="superChatAlert" class="absolute top-3 right-3 sm:right-6 z-40 transition-all duration-500 transform translate-x-10 opacity-0 pointer-events-none bg-gradient-to-r from-amber-400 via-rose-500 to-pink-500 text-white font-black px-3.5 py-2 rounded-2xl shadow-2xl flex items-center gap-2.5 border-2 border-white max-w-xs sm:max-w-sm">
+                <i class="fa-solid fa-crown text-lg text-yellow-200 animate-bounce shrink-0"></i>
+                <div class="text-[11px] leading-tight min-w-0">
+                    <div class="text-yellow-100 font-bold truncate" id="scUser">超級粉絲 抖內 $500！</div>
+                    <div class="truncate font-semibold text-white/90" id="scMsg">主播多吃一點！太好吃啦！🔥</div>
+                </div>
+            </div>
+
+            <!-- STREAMER DIALOGUE SPEECH BUBBLE -->
+            <div id="speechBubble" class="relative z-20 mt-1 mb-2 w-full max-w-xl bg-white/95 border-2 border-slate-800 rounded-2xl p-3 shadow-lg flex items-center gap-3 transition-all duration-300 transform scale-100 shrink-0">
+                <!-- Dialogue Image Slot -->
+                <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-pink-100 border border-pink-300 flex flex-col items-center justify-center overflow-hidden shadow-inner relative">
+                    <img id="dialogImg" src="Dialog_Character1.jpg" alt="主播對話" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <div class="hidden w-full h-full flex-col items-center justify-center text-[9px] text-pink-700 font-bold bg-pink-50">
+                        <i class="fa-solid fa-comment-dots text-pink-400 text-sm"></i>
+                        <span id="dialogImageLabel" class="truncate w-full text-center px-0.5">主播頭像</span>
+                    </div>
+                </div>
+                <!-- Speech Arrow & Content -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-1">
+                        <span id="dialogName" class="font-extrabold text-xs text-pink-600 truncate">吃播好友 A</span>
+                        <span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">主播回應</span>
+                    </div>
+                    <p id="dialogText" class="text-xs sm:text-sm font-black text-slate-800 leading-snug break-words">
+                        大家哈囉！今天準備了超多美食，點選長桌上的菜餵我吃吧！😋
+                    </p>
+                </div>
+            </div>
+
+            <!-- STREAMER CHARACTER INTERACTIVE ZONE -->
+            <div id="streamerDropZone" class="relative z-10 my-auto flex flex-col items-center justify-center py-1 shrink-0">
+                
+                <!-- Facial Status Badge (In vertical flow above avatar for zero overlap) -->
+                <div id="statusBadge" class="mb-2 bg-white/95 backdrop-blur border-2 border-amber-300 text-slate-800 font-black text-xs px-3.5 py-1 rounded-full shadow-md z-20 flex items-center gap-1.5 transition-all">
+                    <span id="statusEmoji">😊</span>
+                    <span id="statusText">精神飽滿</span>
+                </div>
+
+                <!-- Character Body/Face Container -->
+                <div id="characterAvatar" class="relative w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-3xl bg-white border-4 border-white shadow-xl flex flex-col items-center justify-center p-2 transition-all duration-300 face-normal overflow-hidden">
+                    
+                    <!-- Real Image + Placeholder Container -->
+                    <div class="w-full h-full rounded-2xl border-2 border-dashed border-amber-400/80 bg-gradient-to-b from-amber-50 to-orange-100 flex flex-col items-center justify-center relative overflow-hidden">
+                        <img id="charMainImg" src="Character1.jpg" alt="主播照片" class="w-full h-full object-cover rounded-xl" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                        <div class="hidden w-full h-full flex-col items-center justify-center p-2 text-center">
+                            <div id="charIconWrapper" class="text-4xl sm:text-5xl text-pink-500 mb-1">
+                                <i class="fa-solid fa-user-astronaut"></i>
+                            </div>
+                            <div class="bg-white/90 border border-amber-300 rounded-lg p-1 shadow-sm max-w-full">
+                                <span class="text-[10px] font-bold text-slate-500 block">[ 主播頭像 ]</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Studio Prop Badge -->
+                <div class="mt-2 bg-slate-800 text-slate-200 px-3 py-0.5 rounded-full border border-slate-600 shadow flex items-center gap-1.5 text-[10px] font-bold z-20">
+                    <i class="fa-solid fa-microphone text-pink-400 animate-pulse"></i>
+                    <span>收音中</span>
+                </div>
+
+            </div>
+
+            <!-- ================= LONG DINING TABLE & FOOD DISHES CAROUSEL ================= -->
+            <div class="relative w-full z-20 mt-auto shrink-0">
+                
+                <!-- Long Wooden Table -->
+                <div class="relative bg-gradient-to-b from-amber-800 via-amber-900 to-amber-950 rounded-2xl p-2 sm:p-3 shadow-2xl border-t-4 border-amber-500">
+                    
+                    <!-- Table Top Highlight -->
+                    <div class="absolute top-0 left-0 right-0 h-1 bg-amber-400/40 rounded-t-2xl"></div>
+
+                    <!-- Table Header Line -->
+                    <div class="flex items-center justify-between mb-2 px-1">
+                        <div class="text-xs font-black text-amber-100 flex items-center gap-1.5">
+                            <i class="fa-solid fa-utensils text-amber-300"></i>
+                            今日美食饗宴
+                            <span id="pageIndicator" class="bg-amber-950 text-amber-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-amber-700">
+                                第 1 / 4 頁
+                            </span>
+                        </div>
+                        <div class="text-[10px] text-amber-200/80 font-bold hidden sm:block">
+                            點擊左右箭頭可替換隨機菜色
+                        </div>
+                    </div>
+
+                    <!-- DISHES CAROUSEL (LEFT ARROW, DISHES GRID, RIGHT ARROW) -->
+                    <div class="relative flex items-center justify-between gap-1.5 sm:gap-2">
+                        
+                        <!-- LEFT ARROW BUTTON -->
+                        <button onclick="prevFoodPage()" class="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-900 font-black rounded-xl shadow-md border border-amber-200 flex items-center justify-center transition transform active:scale-90 z-30" title="上一頁菜色">
+                            <i class="fa-solid fa-arrow-left text-base sm:text-lg"></i>
+                        </button>
+
+                        <!-- DISHES GRID (6 dishes per page) -->
+                        <div id="foodTableGrid" class="flex-1 grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
+                            <!-- Dynamically populated by JS -->
+                        </div>
+
+                        <!-- RIGHT ARROW BUTTON -->
+                        <button onclick="nextFoodPage()" class="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-900 font-black rounded-xl shadow-md border border-amber-200 flex items-center justify-center transition transform active:scale-90 z-30" title="下一頁菜色">
+                            <i class="fa-solid fa-arrow-right text-base sm:text-lg"></i>
+                        </button>
+
+                    </div>
+
+                    <!-- Table Bottom Tip -->
+                    <div class="text-center text-[10px] text-amber-300/80 font-semibold mt-1.5">
+                        💡 點擊長桌上的菜餚，即可直接餵食給吃播主品嚐！
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ================= PAUSE / HOME MODAL ================= -->
+    <div id="pauseModal" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border-4 border-amber-300 text-center relative animate-bounce-short">
+            
+            <div class="w-14 h-14 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-2">
+                <i class="fa-solid fa-pause"></i>
+            </div>
+
+            <h2 class="text-xl font-black text-slate-800 mb-1">遊戲暫停</h2>
+            <p class="text-xs text-slate-500 mb-5">要繼續直播還是更換角色？</p>
+
+            <div class="flex flex-col gap-2.5">
+                <button onclick="closePauseModal()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl shadow transition flex items-center justify-center gap-2 text-xs sm:text-sm">
+                    <i class="fa-solid fa-play"></i> 繼續直播
+                </button>
+                
+                <button onclick="restartCurrentStream()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl shadow transition flex items-center justify-center gap-2 text-xs sm:text-sm">
+                    <i class="fa-solid fa-rotate-right"></i> 重新擺放桌上菜色
+                </button>
+
+                <button onclick="returnToHome()" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl shadow transition flex items-center justify-center gap-2 text-xs sm:text-sm">
+                    <i class="fa-solid fa-house"></i> 返回首頁選擇角色
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        /* ================= GAME DATA & CONFIGURATION ================= */
+        
+        // 1. Streamer Characters Info
+        const STREAMERS = [
+            {
+                id: 'Character1',
+                name: '吃播主 1',
+                imageFile: 'Character1.jpg',
+                dialogFile: 'Dialog_Character1.jpg',
+                icon: 'fa-user-astronaut',
+                welcomeMsg: '大家哈囉！今天準備了超多美食，快把長桌上的菜拖給我吃吧！😋',
+                themeColor: 'pink'
+            },
+            {
+                id: 'Character2',
+                name: '吃播主 2',
+                imageFile: 'Character2.jpg',
+                dialogFile: 'Dialog_Character2.jpg',
+                icon: 'fa-user-ninja',
+                welcomeMsg: '各位朋友好！今天什麼菜色我都照單全收！🔥',
+                themeColor: 'amber'
+            },
+            {
+                id: 'Character3',
+                name: '吃播主 3',
+                imageFile: 'Character3.jpg',
+                dialogFile: 'Dialog_Character3.jpg',
+                icon: 'fa-user-secret',
+                welcomeMsg: '哈囉大家～今天的吃播菜單好像有些奇怪的東西...好期待！👀',
+                themeColor: 'purple'
+            }
+        ];
+
+        // 2. Complete 24 Food Dishes Database
+        const ALL_FOODS = [
+            // 🌶️ Spicy (辣味) -> Face turns Red
+            { id: 'spicy_1', name: '火雞麵', file: 'BuldakNoodles.jpg', type: 'spicy', icon: '🍜' },
+            { id: 'spicy_2', name: '麻辣鍋', file: 'MalaHotpot.jpg', type: 'spicy', icon: '🍲' },
+            { id: 'spicy_3', name: '辣炒年糕', file: 'Tteokbokki.jpg', type: 'spicy', icon: '🍡' },
+            { id: 'spicy_4', name: 'X辣椒', file: 'XChilliPepper.jpg', type: 'spicy', icon: '🌶️' },
+
+            // 🤢 Stinky (臭味) -> Face turns Purple
+            { id: 'stinky_1', name: '鯡魚罐頭', file: 'Surstromming.jpg', type: 'stinky', icon: '🥫' },
+            { id: 'stinky_2', name: '藍紋起司', file: 'BlueCheese.jpg', type: 'stinky', icon: '🧀' },
+
+            // 😋 Delicious (好吃) -> Face Normal/Happy
+            { id: 'deli_1', name: '披薩', file: 'Pizza.jpg', type: 'delicious', icon: '🍕' },
+            { id: 'deli_2', name: '章魚燒', file: 'Takoyaki.jpg', type: 'delicious', icon: '🐙' },
+            { id: 'deli_3', name: '漢堡', file: 'Burger.jpg', type: 'delicious', icon: '🍔' },
+            { id: 'deli_4', name: '珍珠奶茶', file: 'BobaTea.jpg', type: 'delicious', icon: '🧋' },
+            { id: 'deli_5', name: '炸豬排飯', file: 'Tonkatsu.jpg', type: 'delicious', icon: '🍱' },
+            { id: 'deli_6', name: '串燒', file: 'Yakitori.jpg', type: 'delicious', icon: '🍢' },
+            { id: 'deli_7', name: '咖哩', file: 'Curry.jpg', type: 'delicious', icon: '🍛' },
+            { id: 'deli_8', name: '義大利麵', file: 'Pasta.jpg', type: 'delicious', icon: '🍝' },
+            { id: 'deli_9', name: '西班牙燉飯', file: 'Paella.jpg', type: 'delicious', icon: '🥘' },
+            { id: 'deli_10', name: '蛋糕', file: 'Cake.jpg', type: 'delicious', icon: '🍰' },
+            { id: 'deli_11', name: '鬆餅', file: 'Waffle.jpg', type: 'delicious', icon: '🧇' },
+
+            // 😖 Bitter (苦味) -> Face turns Green
+            { id: 'bitter_1', name: '苦瓜炒鹹蛋', file: 'BitterMelonEgg.jpg', type: 'bitter', icon: '🥒' },
+            { id: 'bitter_2', name: '100%黑巧克力', file: 'DarkChocolate100.jpg', type: 'bitter', icon: '🍫' },
+
+            // 😦 Weird (怪味) -> Face turns Dark/Black, Emoji 😦
+            { id: 'weird_1', name: '皮蛋炒香蕉', file: 'CenturyEggBanana.jpg', type: 'weird', icon: '🍌' },
+            { id: 'weird_2', name: '紅豆麻糬魚丸湯', file: 'RedBeanFishballSoup.jpg', type: 'weird', icon: '🍡' },
+            { id: 'weird_3', name: '三色豆奶茶', file: 'PeaMilkTea.jpg', type: 'weird', icon: '🧋' },
+            { id: 'weird_4', name: '珍珠奶茶燉飯', file: 'BobaRisotto.jpg', type: 'weird', icon: '🍚' },
+            { id: 'weird_5', name: '納豆布丁', file: 'NattoPudding.jpg', type: 'weird', icon: '🍮' }
+        ];
+
+        // 3. Reaction Config - Weird emoji set to 😦, dark blackish face class
+        const REACTION_CONFIG = {
+            spicy: {
+                faceClass: 'face-spicy',
+                emoji: '🥵',
+                statusText: '辣到發紅冒火',
+                badgeBg: 'bg-red-500 text-white',
+                dialogues: [
+                    '火燒舌頭啦！！這到底加了多少辣椒啊啊啊🔥🔥！',
+                    '好辣好辣！救命給水！！耳朵都要冒煙了！🥵',
+                    '這辣度太狂了！眼淚直接標出來，觀眾讚刷起來！🔥'
+                ],
+                chatComments: [
+                    '666666辣到面目全非！',
+                    '臉直接紅成番茄笑死XDD',
+                    '這辣度我看著都覺得舌頭麻了！',
+                    '快給拿牛奶啊啊啊！',
+                    '觀眾抖內 $100 「買水錢」！'
+                ]
+            },
+            stinky: {
+                faceClass: 'face-stinky',
+                emoji: '🤢',
+                statusText: '臭到臉色發紫',
+                badgeBg: 'bg-purple-600 text-white',
+                dialogues: [
+                    '這臭味...簡直是毀滅級的化學武器啊啊！🤮',
+                    '天哪！一口下去整個房間都是氣味！😷',
+                    '我懷疑這食物已經生長出自己的文明了...救命！'
+                ],
+                chatComments: [
+                    '隔著螢幕都聞到臭味了救命XD',
+                    '臉變成高貴紫了哈哈哈！',
+                    '此威力名不虛傳！',
+                    '聊天室集體戴上防毒面具 😷',
+                    '太猛了這個也敢直接吞！'
+                ]
+            },
+            bitter: {
+                faceClass: 'face-bitter',
+                emoji: '😖',
+                statusText: '苦到懷疑人生',
+                badgeBg: 'bg-emerald-600 text-white',
+                dialogues: [
+                    '苦...苦到心坎裡去了！五官都要擠在一起了😖！',
+                    '這比我的人生意志還要苦啊啊啊！',
+                    '吃完這個我覺得世上再也沒有什麼難事了...苦！'
+                ],
+                chatComments: [
+                    '綠光閃閃，這苦味！太苦啦！',
+                    '吃得苦中苦，方為大吃播！',
+                    '五官直接抽搐笑死',
+                    '這黑巧克力真的不是石油嗎？'
+                ]
+            },
+            weird: {
+                faceClass: 'face-weird',
+                emoji: '😦',
+                statusText: '陷入黑暗混亂',
+                badgeBg: 'bg-slate-900 text-amber-300 border border-slate-700',
+                dialogues: [
+                    '這到底是什麼神奇的黑暗組合...我的味蕾崩塌了😦！',
+                    '三色豆加奶茶？？創作者你出來我們聊聊！',
+                    '吃完這一口，我看到了美食界另一個維度的門扉...'
+                ],
+                chatComments: [
+                    '地獄級黑暗料理誕生！！',
+                    '這到底是誰發明的啦笑死！',
+                    '表情整個僵住了😦',
+                    '這組合能吃嗎XDD',
+                    '觀眾集體呈報給檢舉單位中...'
+                ]
+            },
+            delicious: {
+                faceClass: 'face-delicious',
+                emoji: '😋',
+                statusText: '美味到昇天',
+                badgeBg: 'bg-pink-500 text-white',
+                dialogues: [
+                    '太好吃啦！幸福感爆棚，這才是人生的真諦啊💕！',
+                    '嗯～～超濃郁超美味！這個我可以一口氣吃十份！😋',
+                    '神仙美味！口感層次太豐富了，喜歡喜歡～✨'
+                ],
+                chatComments: [
+                    '看吃得好香好餓喔！',
+                    '深夜食堂開播！直接點外送了！',
+                    '這賣相也太誘人了吧😋',
+                    '看著好治癒喔～大推！',
+                    '超級粉絲 抖內 $500！'
+                ]
+            }
+        };
+
+        const RANDOM_USERS = [
+            '小企鵝', '阿王', '聊天室一把手', '家豪', '阿傑',
+            '深夜食堂狂熱者', '主播加油', '特級小當家', '不知道取什麼', '星期二'
+        ];
+
+        /* ================= GAME STATE VARIABLES ================= */
+        let selectedStreamer = STREAMERS[0];
+        let currentFoodList = [];
+        let currentPage = 0;
+        const ITEMS_PER_PAGE = 6;
+        let viewCount = 12580;
+        let likeCount = 88400;
+        let soundEnabled = true;
+        let chatInterval = null;
+        let audioCtx = null;
+
+        window.onload = function() {
+            shuffleAndSetFoods();
+            
+            // Random incoming chat messages loop
+            chatInterval = setInterval(() => {
+                if (Math.random() > 0.4) {
+                    generateRandomChatMessage();
+                }
+            }, 3000);
+        };
+
+        function shuffleAndSetFoods() {
+            currentFoodList = [...ALL_FOODS].sort(() => Math.random() - 0.5);
+            currentPage = 0;
+            renderFoodPage();
+        }
+
+        // Handle custom image upload for character card
+        function handleCharacterUpload(index, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const dataUrl = e.target.result;
+                
+                // Update Streamer Data
+                STREAMERS[index].imageFile = dataUrl;
+                STREAMERS[index].dialogFile = dataUrl;
+                STREAMERS[index].isCustom = true;
+
+                // Update Preview Image in Selection Screen
+                const previewImg = document.getElementById(`charPreviewImg${index}`);
+                if (previewImg) {
+                    previewImg.src = dataUrl;
+                    previewImg.style.display = 'block';
+                    if (previewImg.nextElementSibling) {
+                        previewImg.nextElementSibling.style.display = 'none';
+                    }
+                }
+
+                playSound('click');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function selectCharacter(index) {
+            selectedStreamer = STREAMERS[index];
+            
+            document.getElementById('headerStreamerName').innerText = selectedStreamer.name;
+            document.getElementById('dialogName').innerText = selectedStreamer.name;
+            document.getElementById('dialogText').innerText = selectedStreamer.welcomeMsg;
+
+            // Set image sources
+            const mainImg = document.getElementById('charMainImg');
+            mainImg.src = selectedStreamer.imageFile;
+            mainImg.style.display = 'block';
+
+            const dialogImg = document.getElementById('dialogImg');
+            dialogImg.src = selectedStreamer.dialogFile;
+            dialogImg.style.display = 'block';
+
+            const iconWrapper = document.getElementById('charIconWrapper');
+            iconWrapper.innerHTML = `<i class="fa-solid ${selectedStreamer.icon}"></i>`;
+            
+            resetCharacterFace();
+            document.getElementById('selectScreen').classList.add('hidden');
+            
+            playSound('select');
+            addChatMessage('系統提示', `歡迎來到 ${selectedStreamer.name} 的吃播房間！`, 'text-yellow-400 font-bold');
+        }
+
+        // Render food page (Clean card layout, NO file name labels)
+        function renderFoodPage() {
+            const grid = document.getElementById('foodTableGrid');
+            grid.innerHTML = '';
+
+            const totalPages = Math.ceil(currentFoodList.length / ITEMS_PER_PAGE);
+            document.getElementById('pageIndicator').innerText = `第 ${currentPage + 1} / ${totalPages} 頁`;
+
+            const startIndex = currentPage * ITEMS_PER_PAGE;
+            const pageItems = currentFoodList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+            pageItems.forEach(food => {
+                const card = document.createElement('div');
+                card.className = 'food-card relative cursor-pointer hover:scale-105 active:scale-95 rounded-2xl p-1.5 shadow-md border-2 border-amber-200 flex flex-col items-center justify-between transition-all overflow-hidden bg-white';
+                card.onclick = () => feedStreamer(food);
+
+                card.innerHTML = `
+                    <!-- Food Image Container -->
+                    <div class="w-full h-16 sm:h-20 bg-amber-50/70 rounded-xl flex items-center justify-center p-1 overflow-hidden relative pointer-events-none">
+                        <img src="${food.file}" alt="${food.name}" class="w-full h-full object-contain rounded-lg" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                        <div class="hidden w-full h-full flex-col items-center justify-center text-3xl sm:text-4xl">
+                            ${food.icon}
+                        </div>
+                    </div>
+
+                    <!-- Food Name Box -->
+                    <div class="w-full mt-1.5 bg-amber-100/80 rounded-xl py-1 px-1 text-center shadow-inner border border-amber-200/60 pointer-events-none">
+                        <div class="text-xs sm:text-sm font-black text-slate-800 truncate">
+                            ${food.name}
+                        </div>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        function prevFoodPage() {
+            const totalPages = Math.ceil(currentFoodList.length / ITEMS_PER_PAGE);
+            currentPage = (currentPage - 1 + totalPages) % totalPages;
+            renderFoodPage();
+            playSound('click');
+        }
+
+        function nextFoodPage() {
+            const totalPages = Math.ceil(currentFoodList.length / ITEMS_PER_PAGE);
+            currentPage = (currentPage + 1) % totalPages;
+            renderFoodPage();
+            playSound('click');
+        }
+
+        function feedStreamer(food) {
+            const config = REACTION_CONFIG[food.type] || REACTION_CONFIG.delicious;
+
+            playSound('chew');
+
+            const avatar = document.getElementById('characterAvatar');
+            avatar.className = `relative w-40 h-40 sm:w-52 sm:h-52 md:w-56 md:h-56 rounded-3xl bg-white border-4 border-white shadow-xl flex flex-col items-center justify-center p-3 transition-all duration-300 animate-shake ${config.faceClass}`;
+
+            const badge = document.getElementById('statusBadge');
+            badge.className = `absolute -top-3 ${config.badgeBg} font-black text-xs px-3 py-0.5 rounded-full shadow z-20 flex items-center gap-1 animate-bounce`;
+            document.getElementById('statusEmoji').innerText = config.emoji;
+            document.getElementById('statusText').innerText = `${food.name} - ${config.statusText}`;
+
+            const randDialogue = config.dialogues[Math.floor(Math.random() * config.dialogues.length)];
+            document.getElementById('dialogText').innerText = randDialogue;
+            
+            const speechBubble = document.getElementById('speechBubble');
+            speechBubble.classList.remove('scale-100');
+            speechBubble.classList.add('scale-105');
+            setTimeout(() => speechBubble.classList.remove('scale-105'), 300);
+
+            createFloatingParticles(config.emoji);
+
+            config.chatComments.forEach((comment, idx) => {
+                setTimeout(() => {
+                    const randomUser = RANDOM_USERS[Math.floor(Math.random() * RANDOM_USERS.length)];
+                    addChatMessage(randomUser, comment);
+                }, idx * 350 + Math.random() * 200);
+            });
+
+            viewCount += Math.floor(Math.random() * 300 + 100);
+            likeCount += Math.floor(Math.random() * 800 + 200);
+            document.getElementById('viewerCount').innerText = viewCount.toLocaleString();
+            document.getElementById('likeCount').innerText = (likeCount / 1000).toFixed(1) + 'K';
+
+            if (Math.random() > 0.4) {
+                triggerSuperChat(food);
+            }
+        }
+
+        function resetCharacterFace() {
+            const avatar = document.getElementById('characterAvatar');
+            avatar.className = `relative w-40 h-40 sm:w-52 sm:h-52 md:w-56 md:h-56 rounded-3xl bg-white border-4 border-white shadow-xl flex flex-col items-center justify-center p-3 transition-all duration-300 face-normal`;
+            
+            const badge = document.getElementById('statusBadge');
+            badge.className = `absolute -top-3 bg-white/90 backdrop-blur border border-slate-200 text-slate-800 font-black text-xs px-3 py-0.5 rounded-full shadow z-20 flex items-center gap-1`;
+            document.getElementById('statusEmoji').innerText = '😊';
+            document.getElementById('statusText').innerText = '精神飽滿';
+        }
+
+        function createFloatingParticles(emoji) {
+            const avatar = document.getElementById('characterAvatar');
+            const rect = avatar.getBoundingClientRect();
+
+            for (let i = 0; i < 5; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle text-2xl z-30';
+                p.innerText = emoji;
+                p.style.left = (rect.left + Math.random() * rect.width) + 'px';
+                p.style.top = (rect.top + rect.height / 2 + Math.random() * 20) + 'px';
+                document.body.appendChild(p);
+
+                setTimeout(() => p.remove(), 1200);
+            }
+        }
+
+        function addChatMessage(user, text, textStyle = 'text-slate-200') {
+            const chatBox = document.getElementById('chatBox');
+            const msg = document.createElement('div');
+            msg.className = 'bg-slate-800/80 p-2 rounded-xl border border-slate-700/60 shadow-sm flex flex-col gap-0.5 animate-fadeIn';
+            
+            msg.innerHTML = `
+                <div class="flex items-center justify-between text-[10px]">
+                    <span class="font-black text-pink-400 truncate">${user}</span>
+                    <span class="text-slate-500 font-mono">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                </div>
+                <div class="${textStyle} font-medium leading-tight">${text}</div>
+            `;
+
+            chatBox.appendChild(msg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function generateRandomChatMessage() {
+            const casualComments = [
+                '這什麼酷東東？？',
+                '今天菜單好豐盛喔！',
+                '卡位看吃播 🍿',
+                '求一口吞下！',
+                '這配菜看起來好讚！',
+                '聊天室刷一排 777777！',
+                '67676767'
+            ];
+            const randUser = RANDOM_USERS[Math.floor(Math.random() * RANDOM_USERS.length)];
+            const randText = casualComments[Math.floor(Math.random() * casualComments.length)];
+            addChatMessage(randUser, randText);
+        }
+
+        function sendUserChat() {
+            const input = document.getElementById('userChatInput');
+            const val = input.value.trim();
+            if (val) {
+                addChatMessage('你 (熱情觀眾)', val, 'text-amber-300 font-bold');
+                input.value = '';
+                
+                setTimeout(() => {
+                    document.getElementById('dialogText').innerText = `謝謝觀眾的彈幕「${val}」！愛你們喔！❤️`;
+                }, 1000);
+            }
+        }
+
+        function triggerSuperChat(food) {
+            const sc = document.getElementById('superChatAlert');
+            const randUser = RANDOM_USERS[Math.floor(Math.random() * RANDOM_USERS.length)];
+            const amount = [100, 300, 500, 1000][Math.floor(Math.random() * 4)];
+            
+            document.getElementById('scUser').innerText = `🎉 ${randUser} 抖內 $${amount}！`;
+            document.getElementById('scMsg').innerText = `看你吃【${food.name}】太過癮啦！加碼刷起來！`;
+
+            sc.classList.remove('translate-x-10', 'opacity-0');
+            sc.classList.add('translate-x-0', 'opacity-100');
+
+            playSound('superchat');
+
+            setTimeout(() => {
+                sc.classList.remove('translate-x-0', 'opacity-100');
+                sc.classList.add('translate-x-10', 'opacity-0');
+            }, 3000);
+        }
+
+        function openPauseModal() {
+            document.getElementById('pauseModal').classList.remove('hidden');
+            playSound('click');
+        }
+
+        function closePauseModal() {
+            document.getElementById('pauseModal').classList.add('hidden');
+            playSound('click');
+        }
+
+        function restartCurrentStream() {
+            closePauseModal();
+            shuffleAndSetFoods();
+            resetCharacterFace();
+            document.getElementById('dialogText').innerText = selectedStreamer.welcomeMsg;
+            addChatMessage('系統提示', '菜單已更新，重新擺放菜色！', 'text-amber-400 font-bold');
+        }
+
+        function returnToHome() {
+            closePauseModal();
+            document.getElementById('selectScreen').classList.remove('hidden');
+            resetCharacterFace();
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'chew') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'click' || type === 'select') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(type === 'select' ? 523.25 : 440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'superchat') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.setValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                }
+            } catch(e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('soundBtn');
+            btn.innerHTML = soundEnabled 
+                ? '<i class="fa-solid fa-volume-high text-xs"></i>' 
+                : '<i class="fa-solid fa-volume-xmark text-xs text-red-500"></i>';
+        }
+    </script>
+</body>
+</html>
